@@ -1,0 +1,24 @@
+@font-face {
+  font-family: "Lora";
+  src: url("../../fonts/lora-latin-400-normal.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "Lora", Georgia, serif;
+  background: #faf7f2;
+  color: #2b2118;
+}
+
+.banner {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto 1.5rem;
+}

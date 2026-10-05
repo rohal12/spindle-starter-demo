@@ -1,0 +1,8 @@
+:: Dice
+{do}
+  Story.set("lastRoll", window.demo.rollDice(6));
+{/do}
+You rolled a {$lastRoll}.
+
+[[Roll again->Dice]]
+[[Back to the entrance->Start]]

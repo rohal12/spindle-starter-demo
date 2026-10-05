@@ -1,0 +1,7 @@
+:: Library
+{set $visits = $visits + 1}
+Dusty shelves stretch into the dark. You have visited the library {$visits} time(s).
+
+Saves remember this count: try the save and load buttons in the menu bar.
+
+[[Back to the entrance->Start]]

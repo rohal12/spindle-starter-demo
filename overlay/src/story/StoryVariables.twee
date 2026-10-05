@@ -1,0 +1,4 @@
+:: StoryVariables
+$name = "Traveller"
+$visits = 0
+$lastRoll = 0

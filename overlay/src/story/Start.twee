@@ -2,4 +2,12 @@
 Spindle Demo
 
 :: Start
-Placeholder.
+<img class="banner" src="media/banner.svg" alt="Spindle Demo" />
+
+Welcome, {$name}. This little story is built from the latest
+spindle-starter to show what the template produces, and to test its
+builds on every platform.
+
+[[Visit the library->Library]]
+[[Roll a die->Dice]]
+[[About this demo->About]]
