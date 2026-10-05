@@ -1,0 +1,181 @@
+name: Build demo
+
+on:
+  repository_dispatch:
+    types: [starter-main, starter-release]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: spindle-starter ref to build (branch, tag or SHA)
+        default: main
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: demo-${{ github.event.action || github.event_name }}-${{ github.event.client_payload.ref || inputs.ref || 'main' }}
+  cancel-in-progress: ${{ github.event.action != 'starter-release' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      ref: ${{ steps.plan.outputs.ref }}
+      version: ${{ steps.plan.outputs.version }}
+      deploy: ${{ steps.plan.outputs.deploy }}
+      release: ${{ steps.plan.outputs.release }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          ACTION: ${{ github.event.action }}
+          PAYLOAD_REF: ${{ github.event.client_payload.ref }}
+          INPUT_REF: ${{ inputs.ref }}
+        run: |
+          ref="${PAYLOAD_REF:-${INPUT_REF:-main}}"
+          deploy=false
+          release=false
+          case "$EVENT/$ACTION" in
+            repository_dispatch/starter-main | push/*) deploy=true ;;
+            repository_dispatch/starter-release) deploy=true; release=true ;;
+          esac
+          {
+            echo "ref=$ref"
+            echo "version=$(scripts/demo-version.sh "$ref")"
+            echo "deploy=$deploy"
+            echo "release=$release"
+          } | tee -a "$GITHUB_OUTPUT"
+
+  web:
+    needs: plan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: scripts/assemble.sh "${{ needs.plan.outputs.ref }}" work
+      - run: npm install --no-audit --no-fund
+        working-directory: work
+      - run: npm run lint
+        working-directory: work
+      - run: npx tsc --noEmit -p .
+        working-directory: work
+      - run: npm run build
+        working-directory: work
+        env:
+          NODE_ENV: production
+          SPINDLE_PACK_TARGETS: none
+      - run: scripts/check-dist.sh work
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: work/dist
+
+  deploy:
+    needs: [plan, web]
+    if: needs.plan.outputs.deploy == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
+
+  pack:
+    needs: plan
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: windows, os: windows-latest }
+          - { target: macos, os: macos-latest }
+          - { target: linux, os: ubuntu-latest }
+          - { target: android, os: ubuntu-latest }
+          - { target: joiplay, os: ubuntu-latest }
+    runs-on: ${{ matrix.os }}
+    # Optional Android signing: without these secrets the APK is a debug build
+    env:
+      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # Desktop (Tauri): mirrors spindle-starter's build-desktop.yml
+      - if: contains(fromJSON('["windows","macos","linux"]'), matrix.target)
+        uses: dtolnay/rust-toolchain@stable
+      - if: matrix.target == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      # Android (Capacitor): mirrors spindle-starter's build-android.yml
+      - if: matrix.target == 'android'
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - if: matrix.target == 'android'
+        uses: android-actions/setup-android@v4
+      - if: matrix.target == 'android' && env.KEYSTORE_BASE64 != ''
+        run: echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+
+      - run: scripts/assemble.sh "${{ needs.plan.outputs.ref }}" work
+      - if: contains(fromJSON('["windows","macos","linux"]'), matrix.target)
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: work/pack/tauri/src-tauri -> target
+      - run: npm install --no-audit --no-fund
+        working-directory: work
+      - run: npx vite build -c vite.demo.config.ts
+        working-directory: work
+        env:
+          NODE_ENV: production
+          SPINDLE_PACK_TARGETS: ${{ matrix.target }}
+          DEMO_VERSION: ${{ needs.plan.outputs.version }}
+          SPINDLE_KEYSTORE_PATH: ${{ matrix.target == 'android' && env.KEYSTORE_BASE64 != '' && format('{0}/release.keystore', runner.temp) || '' }}
+          SPINDLE_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          SPINDLE_KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'release' }}
+          SPINDLE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pack-${{ matrix.target }}
+          path: work/dist/pack/${{ matrix.target }}/
+          if-no-files-found: error
+
+  release:
+    needs: [plan, web, pack]
+    if: needs.plan.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: pack-*
+          path: assets
+          merge-multiple: true
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.plan.outputs.ref }}
+          REPO: ${{ github.repository }}
+        run: |
+          ls -la assets
+          notes="Demo builds of [spindle-starter $TAG](https://github.com/rohal12/spindle-starter/releases/tag/$TAG). Play it in the browser at https://rohal12.github.io/spindle-starter-demo/."
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            gh release upload "$TAG" assets/* --repo "$REPO" --clobber
+          else
+            gh release create "$TAG" assets/* --repo "$REPO" --title "Spindle Demo $TAG" --notes "$notes"
+          fi
