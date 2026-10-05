@@ -10,7 +10,9 @@ sha="$(git ls-remote https://github.com/rohal12/spindle-starter.git refs/heads/m
 for ref in main v2.2.0 "$sha"; do
   echo "ref: $ref"
   dir="$tmp/$ref"
-  if scripts/assemble.sh "$ref" "$dir" >/dev/null; then pass "assemble $ref"; else fail "assemble $ref"; continue; fi
+  if out="$(scripts/assemble.sh "$ref" "$dir")"; then pass "assemble $ref"; else fail "assemble $ref"; continue; fi
+  # The resolved commit is logged, so a failed run of a branch is traceable
+  if grep -Eq "spindle-starter@$ref \(commit [0-9a-f]{40}\)" <<<"$out"; then pass "logs resolved commit"; else fail "does not log resolved commit: $out"; fi
   assert_file "$dir/package.json"
   assert_file "$dir/vite.config.ts"
   assert_no_file "$dir/.git"

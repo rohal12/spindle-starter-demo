@@ -14,9 +14,11 @@ This repo doesn't contain a copy of the template. `overlay/` holds only the demo
 | Trigger | Starter ref | Deploys Pages | Creates release |
 |---|---|---|---|
 | spindle-starter push to `main` | that commit | yes | no |
-| spindle-starter release | the release tag | yes | yes, same tag |
+| spindle-starter release | the release tag | no | yes, same tag (pre-release if the version has a `-` suffix) |
 | Push to this repo's `main` | `main` | yes | no |
 | Manual run (Actions → Build demo) | input `ref` | no | no |
+
+The Pages site always shows starter `main`: builds of `main` share one concurrency group, so a newer run cancels an older one. Manual runs accept an optional `version` input (e.g. `2.3.0-beta.1`) to test version handling without a release.
 
 ## Local build
 
@@ -28,7 +30,7 @@ This repo doesn't contain a copy of the template. `overlay/` holds only the demo
 
 ## Tests
 
-    tests/assemble.test.sh && tests/demo-version.test.sh && tests/check-dist.test.sh
+    for t in tests/*.test.sh; do "$t" || exit 1; done
 
 ## Credits
 

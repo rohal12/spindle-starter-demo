@@ -8,14 +8,20 @@ on:
       ref:
         description: spindle-starter ref to build (branch, tag or SHA)
         default: main
+      version:
+        description: Override the app version (semver, e.g. 2.3.0-beta.1); default is derived from the ref
+        required: false
   push:
     branches: [main]
 
 permissions:
   contents: read
 
+# Builds of starter main (starter pushes and pushes here) share one group, so a
+# newer run cancels an older one and the Pages site never goes backwards.
+# Releases are never cancelled.
 concurrency:
-  group: demo-${{ github.event.action || github.event_name }}-${{ github.event.client_payload.ref || inputs.ref || 'main' }}
+  group: ${{ (github.event.action == 'starter-main' || github.event_name == 'push') && 'demo-main' || format('demo-{0}-{1}', github.event.action || github.event_name, github.event.client_payload.ref || inputs.ref || 'main') }}
   cancel-in-progress: ${{ github.event.action != 'starter-release' }}
 
 defaults:
@@ -30,6 +36,7 @@ jobs:
       version: ${{ steps.plan.outputs.version }}
       deploy: ${{ steps.plan.outputs.deploy }}
       release: ${{ steps.plan.outputs.release }}
+      prerelease: ${{ steps.plan.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v7
       - id: plan
@@ -38,21 +45,8 @@ jobs:
           ACTION: ${{ github.event.action }}
           PAYLOAD_REF: ${{ github.event.client_payload.ref }}
           INPUT_REF: ${{ inputs.ref }}
-        run: |
-          ref="${PAYLOAD_REF:-${INPUT_REF:-main}}"
-          scripts/check-ref.sh "$ref"
-          deploy=false
-          release=false
-          case "$EVENT/$ACTION" in
-            repository_dispatch/starter-main | push/*) deploy=true ;;
-            repository_dispatch/starter-release) deploy=true; release=true ;;
-          esac
-          {
-            echo "ref=$ref"
-            echo "version=$(scripts/demo-version.sh "$ref")"
-            echo "deploy=$deploy"
-            echo "release=$release"
-          } | tee -a "$GITHUB_OUTPUT"
+          INPUT_VERSION: ${{ inputs.version }}
+        run: scripts/plan.sh | tee -a "$GITHUB_OUTPUT"
 
   web:
     needs: plan
@@ -107,9 +101,10 @@ jobs:
           - { target: android, os: ubuntu-latest }
           - { target: joiplay, os: ubuntu-latest }
     runs-on: ${{ matrix.os }}
-    # Optional Android signing: without these secrets the APK is a debug build
+    # Optional Android signing: without these secrets the APK is a debug build.
+    # Only the android job receives them.
     env:
-      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+      KEYSTORE_BASE64: ${{ matrix.target == 'android' && secrets.KEYSTORE_BASE64 || '' }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -151,9 +146,9 @@ jobs:
           SPINDLE_PACK_TARGETS: ${{ matrix.target }}
           DEMO_VERSION: ${{ needs.plan.outputs.version }}
           SPINDLE_KEYSTORE_PATH: ${{ matrix.target == 'android' && env.KEYSTORE_BASE64 != '' && format('{0}/release.keystore', runner.temp) || '' }}
-          SPINDLE_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          SPINDLE_KEY_ALIAS: ${{ secrets.KEY_ALIAS || 'release' }}
-          SPINDLE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          SPINDLE_KEYSTORE_PASSWORD: ${{ matrix.target == 'android' && secrets.KEYSTORE_PASSWORD || '' }}
+          SPINDLE_KEY_ALIAS: ${{ matrix.target == 'android' && secrets.KEY_ALIAS || 'release' }}
+          SPINDLE_KEY_PASSWORD: ${{ matrix.target == 'android' && secrets.KEY_PASSWORD || '' }}
       - uses: actions/upload-artifact@v7
         with:
           name: pack-${{ matrix.target }}
@@ -175,12 +170,15 @@ jobs:
       - env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.plan.outputs.ref }}
+          PRERELEASE: ${{ needs.plan.outputs.prerelease }}
           REPO: ${{ github.repository }}
         run: |
           ls -la assets
           notes="Demo builds of [spindle-starter $TAG](https://github.com/rohal12/spindle-starter/releases/tag/$TAG). Play it in the browser at https://rohal12.github.io/spindle-starter-demo/."
+          flags=()
+          [ "$PRERELEASE" = true ] && flags+=(--prerelease)
           if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
             gh release upload "$TAG" assets/* --repo "$REPO" --clobber
           else
-            gh release create "$TAG" assets/* --repo "$REPO" --title "Spindle Demo $TAG" --notes "$notes"
+            gh release create "$TAG" assets/* --repo "$REPO" --title "Spindle Demo $TAG" --notes "$notes" "${flags[@]}"
           fi

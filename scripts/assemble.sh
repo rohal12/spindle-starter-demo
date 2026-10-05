@@ -35,4 +35,5 @@ git -C "$tmp" archive FETCH_HEAD | tar -x -C "$dir"
 rm -rf "$dir/src/story"
 cp -R "$root/overlay/." "$dir/"
 
-echo "Assembled spindle-starter@$ref + overlay in $dir"
+commit="$(git -C "$tmp" rev-parse 'FETCH_HEAD^{commit}')"
+echo "Assembled spindle-starter@$ref (commit $commit) + overlay in $dir"

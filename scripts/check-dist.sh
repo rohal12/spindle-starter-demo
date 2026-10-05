@@ -2,7 +2,8 @@
 # Check that <project>/dist is a complete web build of the demo story.
 # Usage: scripts/check-dist.sh <project-dir>
 set -uo pipefail
-dist="${1:?usage: check-dist.sh <project-dir>}/dist"
+project="${1:?usage: check-dist.sh <project-dir>}"
+dist="$project/dist"
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 . "$root/tests/lib.sh"
 
@@ -13,6 +14,10 @@ assert_grep "Spindle Demo" "$html"
 for passage in Start Library Dice About StoryVariables StoryInterface; do
   assert_grep "name=\"$passage\"" "$html"
 done
+# Built with the installed Spindle, not a different (e.g. remotely fetched) format
+installed="$(grep -o '"version": *"[^"]*"' "$project/node_modules/@rohal12/spindle/package.json" 2>/dev/null | head -1 | cut -d'"' -f4)"
+built="$(grep -o 'format-version="[^"]*"' "$html" 2>/dev/null | head -1 | cut -d'"' -f2)"
+assert_eq "${installed:-<not installed>}" "${built:-<none>}" "story format-version matches installed @rohal12/spindle"
 # Script and styles were bundled and inlined
 assert_grep "rollDice" "$html"
 assert_grep "font-family:\"Lora\"\|font-family: \"Lora\"\|font-family:Lora" "$html"
