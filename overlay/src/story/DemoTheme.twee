@@ -1,0 +1,6 @@
+:: DemoTheme [stylesheet]
+/* A Twine-style stylesheet passage alongside the SCSS bundle: it must load
+   after the bundle so it can override it, as in a typical story. */
+.banner {
+  border-radius: 12px;
+}

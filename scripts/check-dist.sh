@@ -24,6 +24,9 @@ if sed -n '/id="twine-user-stylesheet"/,$p' "$html" | sed '1s/.*id="twine-user-s
 else
   fail "app CSS is not in the story stylesheet (would load before Spindle's styles)"
 fi
+# The bundle must be the first story stylesheet: @import is only valid at the
+# top, and stylesheet passages (DemoTheme) must be able to override it.
+assert_grep '#1: "app.bundle.css"' "$html"
 # Media copied to dist/media, font emitted to dist/fonts
 assert_file "$dist/media/banner.svg"
 assert_file "$dist/media/icon.png"
