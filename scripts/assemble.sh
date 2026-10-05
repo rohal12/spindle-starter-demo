@@ -11,6 +11,7 @@ ref="${1:?usage: assemble.sh <ref> <dir>}"
 dir="${2:?usage: assemble.sh <ref> <dir>}"
 repo="${STARTER_REPO:-https://github.com/rohal12/spindle-starter.git}"
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+"$root/scripts/check-ref.sh" "$ref"
 
 if [ -e "$dir" ] && [ -n "$(ls -A "$dir")" ]; then
   echo "error: $dir is not empty" >&2
