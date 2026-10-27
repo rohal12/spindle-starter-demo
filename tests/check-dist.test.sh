@@ -9,13 +9,13 @@ tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 make_good() {
   local p="$1"
   mkdir -p "$p/dist/media" "$p/dist/fonts" "$p/node_modules/@rohal12/spindle"
-  touch "$p/dist/media/banner.svg" "$p/dist/media/icon.png" "$p/dist/fonts/lora-latin-400-normal.woff2"
+  touch "$p/dist/media/banner.svg" "$p/dist/media/icon.png" "$p/dist/fonts/lora-latin-400-normal-DnxXpLNu.woff2"
   echo '{ "name": "@rohal12/spindle", "version": "0.51.3" }' > "$p/node_modules/@rohal12/spindle/package.json"
   cat > "$p/dist/index.html" <<'HTML'
 <title>Spindle Demo</title>
 <script>window.demo = { rollDice }</script>
 <style role="stylesheet" id="twine-user-stylesheet" type="text/twine-css">/* twine-user-stylesheet #1: "app.bundle.css" */
-@font-face{font-family:Lora;src:url(fonts/lora-latin-400-normal.woff2)}body{font-family:Lora}
+@font-face{font-family:Lora;src:url(fonts/lora-latin-400-normal-DnxXpLNu.woff2)}body{font-family:Lora}
 /* twine-user-stylesheet #2: "DemoTheme" */</style>
 <tw-storydata name="Spindle Demo" format="spindle" format-version="0.51.3">
 <tw-passagedata name="Start"></tw-passagedata><tw-passagedata name="Library"></tw-passagedata>
@@ -45,8 +45,16 @@ assert_fails "rejects bundle after stylesheet passages" scripts/check-dist.sh "$
 mutate format 's/format-version="0.51.3"/format-version="0.51.0"/'
 assert_fails "rejects story built with a different Spindle version" scripts/check-dist.sh "$tmp/format"
 
-make_good "$tmp/nofont" && rm "$tmp/nofont/dist/fonts/lora-latin-400-normal.woff2"
+make_good "$tmp/nofont" && rm "$tmp/nofont/dist/fonts/lora-latin-400-normal-DnxXpLNu.woff2"
 assert_fails "rejects missing font" scripts/check-dist.sh "$tmp/nofont"
+
+mutate stalefont 's#lora-latin-400-normal-DnxXpLNu#lora-latin-400-normal-0ld0Hash#'
+assert_fails "rejects a font URL that is not the emitted font" scripts/check-dist.sh "$tmp/stalefont"
+
+# Starter releases up to 2.3.0 emit the font without a content hash
+mutate plainfont 's#lora-latin-400-normal-DnxXpLNu#lora-latin-400-normal#'
+mv "$tmp/plainfont/dist/fonts/lora-latin-400-normal-DnxXpLNu.woff2" "$tmp/plainfont/dist/fonts/lora-latin-400-normal.woff2"
+if scripts/check-dist.sh "$tmp/plainfont" >/dev/null; then pass "accepts an unhashed font name"; else fail "rejects an unhashed font name"; fi
 
 make_good "$tmp/pack" && mkdir "$tmp/pack/dist/pack"
 assert_fails "rejects pack output in a web build" scripts/check-dist.sh "$tmp/pack"
