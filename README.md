@@ -22,6 +22,8 @@ The Pages site always shows starter `main`: builds of `main` share one concurren
 
 ## Local build
 
+Needs Node.js 24 or later, as the starter does.
+
     scripts/assemble.sh main work
     cd work && npm install && npm run lint && npm run build
     ../scripts/check-dist.sh .
