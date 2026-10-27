@@ -32,12 +32,16 @@ fi
 # The bundle must be the first story stylesheet: @import is only valid at the
 # top, and stylesheet passages (DemoTheme) must be able to override it.
 assert_grep '#1: "app.bundle.css"' "$html"
-# Media copied to dist/media, font emitted to dist/fonts
+# Media copied to dist/media, font emitted to dist/fonts. The starter names
+# emitted fonts with a content hash (lora-latin-400-normal-<hash>.woff2);
+# releases up to 2.3.0 used the plain name.
 assert_file "$dist/media/banner.svg"
 assert_file "$dist/media/icon.png"
-assert_file "$dist/fonts/lora-latin-400-normal.woff2"
-# Asset URLs must be relative so the demo works on a Pages subpath and under file://
-assert_grep "url(fonts/lora-latin-400-normal.woff2)" "$html"
+font="$(find "$dist/fonts" -maxdepth 1 -type f 2>/dev/null | grep -E '/lora-latin-400-normal(-[A-Za-z0-9_-]+)?\.woff2$' | head -1)"
+if [ -n "$font" ]; then pass "font emitted: $font"; else fail "missing: $dist/fonts/lora-latin-400-normal[-<hash>].woff2"; fi
+# Asset URLs must be relative so the demo works on a Pages subpath and under
+# file://, and must name the font file that was emitted
+assert_grep "url(fonts/${font##*/})" "$html"
 assert_no_grep "url(/" "$html"
 # A web build must not contain packaging output
 assert_no_file "$dist/pack"
